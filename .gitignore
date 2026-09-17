@@ -1,0 +1,35 @@
+# Local Judge0 configuration (copy judge0.conf.example to judge0.conf).
+/judge0.conf
+.env
+.env.*
+!.env.example
+!.env.*.example
+/config/master.key
+/config/credentials/*.key
+
+# Rails runtime and generated files.
+/log/*
+!/log/.keep
+/tmp/*
+!/tmp/.keep
+/storage/*
+!/storage/.keep
+/public/assets/
+/public/packs/
+/public/packs-test/
+/coverage/
+
+# Local dependencies and build output.
+/.bundle/
+/vendor/*
+!/vendor/.keep
+/node_modules/
+/release-*/
+
+# Editor and operating system files.
+.DS_Store
+.idea/
+*.swp
+*.swo
+*~
+.byebug_history
