@@ -1,5 +1,6 @@
 Rails.application.routes.draw do
   root 'home#index'
+  get 'api-docs', to: redirect('/swagger.html')
 
   resources :submissions, only: [:index, :show, :create, :destroy], param: :token do
     post 'batch', to: 'submissions#batch_create', on: :collection

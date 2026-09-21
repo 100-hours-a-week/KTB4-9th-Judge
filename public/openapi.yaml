@@ -1,0 +1,705 @@
+openapi: 3.0.3
+info:
+  title: Judge0 API
+  version: 1.13.1
+  description: |
+    OpenAPI documentation for this Judge0 CE instance. The existing API Blueprint
+    documentation remains available at /. Authentication and authorization headers
+    are configurable by the instance administrator; X-Auth-Token and X-Auth-User
+    are their default names. Some features are controlled by server configuration.
+servers:
+  - url: /
+tags:
+  - name: Submissions
+  - name: Languages
+  - name: Statuses
+  - name: Authentication
+  - name: Information
+  - name: Health
+paths:
+  /submissions:
+    get:
+      tags: [Submissions]
+      summary: List submissions
+      description: Requires authorization when configured.
+      security:
+        - AuthUser: []
+          AuthToken: []
+        - AuthUser: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Base64Encoded'
+        - $ref: '#/components/parameters/Fields'
+      responses:
+        '200':
+          description: Paginated submissions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  submissions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Submission'
+                  meta:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Submissions]
+      summary: Create a submission
+      description: |
+        A successful asynchronous request returns a token. If wait=true is enabled
+        on the server, the response can contain the completed submission instead.
+        For a multi-file program, use language_id 89 and send additional_files
+        as a Base64-encoded ZIP archive.
+      parameters:
+        - $ref: '#/components/parameters/Base64Encoded'
+        - name: wait
+          in: query
+          description: Wait for execution; may be disabled by server configuration.
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/Fields'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmissionInput'
+      responses:
+        '201':
+          description: Submission created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Submission'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /submissions/batch:
+    get:
+      tags: [Submissions]
+      summary: Get a submission batch
+      description: Missing tokens are represented by null entries.
+      parameters:
+        - name: tokens
+          in: query
+          required: true
+          description: Comma-separated submission tokens.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Base64Encoded'
+        - $ref: '#/components/parameters/Fields'
+      responses:
+        '200':
+          description: Submissions in the same order as requested tokens.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  submissions:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/Submission'
+                      nullable: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Submissions]
+      summary: Create a submission batch
+      description: Results are ordered like the input and may mix tokens and per-item validation errors. wait=true is not supported.
+      parameters:
+        - $ref: '#/components/parameters/Base64Encoded'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [submissions]
+              properties:
+                submissions:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/SubmissionInput'
+      responses:
+        '201':
+          description: At least one submission was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchCreateResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: Every submission failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchCreateResult'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /submissions/{token}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Submissions]
+      summary: Get a submission
+      parameters:
+        - $ref: '#/components/parameters/Base64Encoded'
+        - $ref: '#/components/parameters/Fields'
+      responses:
+        '200':
+          description: Submission details. Fields depend on the fields query parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Submission'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Submissions]
+      summary: Delete a submission
+      description: Requires authorization and server-side deletion to be enabled.
+      security:
+        - AuthUser: []
+          AuthToken: []
+        - AuthUser: []
+      parameters:
+        - $ref: '#/components/parameters/Fields'
+      responses:
+        '200':
+          description: Deleted submission. Text fields are Base64-encoded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Submission'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /languages:
+    get:
+      tags: [Languages]
+      summary: List active languages
+      responses:
+        '200':
+          description: Active languages.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LanguageSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /languages/all:
+    get:
+      tags: [Languages]
+      summary: List active and archived languages
+      responses:
+        '200':
+          description: All languages.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Language'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /languages/{id}:
+    get:
+      tags: [Languages]
+      summary: Get a language
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Language details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Language'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /statuses:
+    get:
+      tags: [Statuses]
+      summary: List submission statuses
+      responses:
+        '200':
+          description: Statuses.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Status'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /authenticate:
+    post:
+      tags: [Authentication]
+      summary: Check the authentication token
+      description: Authentication may be disabled on an instance.
+      security:
+        - AuthToken: []
+        - {}
+      responses:
+        '200':
+          description: Token valid or authentication disabled.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /authorize:
+    post:
+      tags: [Authentication]
+      summary: Check the authorization token
+      security:
+        - AuthUser: []
+          AuthToken: []
+        - AuthUser: []
+      responses:
+        '200':
+          description: Authorization token valid.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /system_info:
+    get:
+      tags: [Information]
+      summary: Get host system information
+      responses:
+        '200':
+          description: System information; fields depend on the host.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /config_info:
+    get:
+      tags: [Information]
+      summary: Get server configuration
+      responses:
+        '200':
+          description: Public server configuration.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /isolate:
+    get:
+      tags: [Information]
+      summary: Get isolate version
+      responses:
+        '200':
+          description: isolate --version output.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /about:
+    get:
+      tags: [Information]
+      summary: Get Judge0 metadata
+      responses:
+        '200':
+          description: Version and project metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                  homepage:
+                    type: string
+                    format: uri
+                  source_code:
+                    type: string
+                    format: uri
+                  maintainer:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /version:
+    get:
+      tags: [Information]
+      summary: Get Judge0 version
+      responses:
+        '200':
+          description: Version string.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /license:
+    get:
+      tags: [Information]
+      summary: Get license text
+      responses:
+        '200':
+          description: License text.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /statistics:
+    get:
+      tags: [Information]
+      summary: Get instance statistics
+      description: Results are cached for ten minutes.
+      parameters:
+        - name: invalidate_cache
+          in: query
+          description: Invalidate the statistics cache before reading.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Instance statistics.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /workers:
+    get:
+      tags: [Health]
+      summary: Get queue and worker status
+      parameters:
+        - name: prune_dead_workers
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Worker counts by queue.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    queue:
+                      type: string
+                    size:
+                      type: integer
+                    available:
+                      type: integer
+                    idle:
+                      type: integer
+                    working:
+                      type: integer
+                    paused:
+                      type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  securitySchemes:
+    AuthToken:
+      type: apiKey
+      in: header
+      name: X-Auth-Token
+      description: Default authentication header; the administrator may change its name.
+    AuthUser:
+      type: apiKey
+      in: header
+      name: X-Auth-User
+      description: Default authorization header; the administrator may change its name.
+  parameters:
+    Base64Encoded:
+      name: base64_encoded
+      in: query
+      description: Encode request text or response text as Base64.
+      schema:
+        type: boolean
+        default: false
+    Fields:
+      name: fields
+      in: query
+      description: Comma-separated list of submission fields to include.
+      schema:
+        type: string
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PerPage:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+  responses:
+    BadRequest:
+      description: Invalid request or disabled feature.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication failed.
+    Forbidden:
+      description: Authorization failed or IP address disallowed.
+    NotFound:
+      description: Resource not found.
+    ValidationError:
+      description: Submission validation failed.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties:
+              type: array
+              items:
+                type: string
+    ServiceUnavailable:
+      description: Queue full or maintenance mode.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    Status:
+      type: object
+      properties:
+        id:
+          type: integer
+        description:
+          type: string
+    LanguageSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+    Language:
+      allOf:
+        - $ref: '#/components/schemas/LanguageSummary'
+        - type: object
+          properties:
+            is_archived:
+              type: boolean
+            source_file:
+              type: string
+              nullable: true
+            compile_cmd:
+              type: string
+              nullable: true
+            run_cmd:
+              type: string
+              nullable: true
+    SubmissionInput:
+      type: object
+      required: [language_id]
+      description: source_code is required for single-file programs; additional_files is required for language_id 89.
+      properties:
+        source_code:
+          type: string
+        language_id:
+          type: integer
+        compiler_options:
+          type: string
+        command_line_arguments:
+          type: string
+        stdin:
+          type: string
+        expected_output:
+          type: string
+        cpu_time_limit:
+          type: number
+        cpu_extra_time:
+          type: number
+        wall_time_limit:
+          type: number
+        memory_limit:
+          type: number
+        stack_limit:
+          type: integer
+        max_processes_and_or_threads:
+          type: integer
+        enable_per_process_and_thread_time_limit:
+          type: boolean
+        enable_per_process_and_thread_memory_limit:
+          type: boolean
+        max_file_size:
+          type: integer
+        redirect_stderr_to_stdout:
+          type: boolean
+        enable_network:
+          type: boolean
+        number_of_runs:
+          type: integer
+        additional_files:
+          type: string
+          format: byte
+          description: Base64-encoded ZIP archive.
+        callback_url:
+          type: string
+          format: uri
+    Submission:
+      type: object
+      description: Present fields depend on fields and wait query parameters.
+      properties:
+        token:
+          type: string
+          format: uuid
+        language_id:
+          type: integer
+        language:
+          $ref: '#/components/schemas/LanguageSummary'
+        source_code:
+          type: string
+          nullable: true
+        stdout:
+          type: string
+          nullable: true
+        stderr:
+          type: string
+          nullable: true
+        compile_output:
+          type: string
+          nullable: true
+        message:
+          type: string
+          nullable: true
+        stdin:
+          type: string
+          nullable: true
+        expected_output:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/Status'
+        status_id:
+          type: integer
+        time:
+          type: string
+          nullable: true
+        wall_time:
+          type: string
+          nullable: true
+        memory:
+          type: integer
+          nullable: true
+        exit_code:
+          type: integer
+          nullable: true
+        exit_signal:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        additional_files:
+          type: string
+          format: byte
+          nullable: true
+    Pagination:
+      type: object
+      properties:
+        current_page:
+          type: integer
+        next_page:
+          type: integer
+          nullable: true
+        prev_page:
+          type: integer
+          nullable: true
+        total_pages:
+          type: integer
+        total_count:
+          type: integer
+    BatchCreateResult:
+      type: array
+      items:
+        oneOf:
+          - type: object
+            required: [token]
+            properties:
+              token:
+                type: string
+                format: uuid
+          - type: object
+            description: Submission validation errors keyed by field name.
+            additionalProperties:
+              type: array
+              items:
+                type: string
+security:
+  - AuthToken: []
+  - {}
+
