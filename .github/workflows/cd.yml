@@ -61,14 +61,7 @@ jobs:
           test -f judge0.conf
 
           image=%q
-          env_tmp=$(mktemp .env.tmp.XXXXXX)
-          trap '\''rm -f "$env_tmp"'\'' EXIT
-          if test -f .env; then
-            grep -v "^JUDGE0_IMAGE=" .env > "$env_tmp" || test "$?" -eq 1
-          fi
-          printf "JUDGE0_IMAGE=%%s\n" "$image" >> "$env_tmp"
-          mv "$env_tmp" .env
-          trap - EXIT
+          export JUDGE0_IMAGE="$image"
 
           docker compose pull server worker
           docker compose up -d --force-recreate --remove-orphans
