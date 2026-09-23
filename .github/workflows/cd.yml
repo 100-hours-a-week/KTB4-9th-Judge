@@ -55,6 +55,32 @@ jobs:
           EC2_DEPLOY_PATH: ${{ secrets.EC2_DEPLOY_PATH }}
           JUDGE0_IMAGE: gwanghyeonkim/cosmosejudege:${{ github.event.workflow_run.head_sha }}
         run: |
-          printf -v deploy_script 'set -euo pipefail; cd %q; test -f docker-compose.yml; test -f judge0.conf; JUDGE0_IMAGE=%q docker compose pull server worker; JUDGE0_IMAGE=%q docker compose up -d --remove-orphans' "$EC2_DEPLOY_PATH" "$JUDGE0_IMAGE" "$JUDGE0_IMAGE"
+          printf -v deploy_script 'set -euo pipefail
+          cd %q
+          test -f docker-compose.yml
+          test -f judge0.conf
+
+          image=%q
+          env_tmp=$(mktemp .env.tmp.XXXXXX)
+          trap '\''rm -f "$env_tmp"'\'' EXIT
+          if test -f .env; then
+            grep -v "^JUDGE0_IMAGE=" .env > "$env_tmp" || test "$?" -eq 1
+          fi
+          printf "JUDGE0_IMAGE=%%s\n" "$image" >> "$env_tmp"
+          mv "$env_tmp" .env
+          trap - EXIT
+
+          docker compose pull server worker
+          docker compose up -d --force-recreate --remove-orphans
+
+          server_container=$(docker compose ps -q server)
+          worker_container=$(docker compose ps -q worker)
+          test -n "$server_container"
+          test -n "$worker_container"
+          test "$(docker inspect --format '\''{{.Config.Image}}'\'' "$server_container")" = "$image"
+          test "$(docker inspect --format '\''{{.Config.Image}}'\'' "$worker_container")" = "$image"
+          docker compose ps
+          ' "$EC2_DEPLOY_PATH" "$JUDGE0_IMAGE"
+          bash -n -c "$deploy_script"
           printf -v remote_command 'bash -lc %q' "$deploy_script"
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "$remote_command"

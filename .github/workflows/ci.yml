@@ -101,4 +101,3 @@ jobs:
           push: ${{ github.event_name == 'push' }}
           tags: gwanghyeonkim/cosmosejudege:${{ github.sha }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
