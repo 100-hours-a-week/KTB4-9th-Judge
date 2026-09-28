@@ -1,9 +1,9 @@
 class SubmissionsController < ApplicationController
   before_action :authorize_request, only: [:index, :destroy]
-  before_action :check_maintenance, only: [:create, :judge, :destroy]
+  before_action :check_maintenance, only: [:create, :destroy]
   before_action :check_wait, only: [:create] # Wait in batch_create is not allowed
   before_action :check_batched_submissions, only: [:batch_create, :batch_show]
-  before_action :check_queue_size, only: [:create, :judge, :batch_create]
+  before_action :check_queue_size, only: [:create, :batch_create]
   before_action :check_requested_fields, except: [:batch_create] # Fields are ignored in batch_create
   before_action :set_base64_encoded
 
@@ -120,25 +120,6 @@ class SubmissionsController < ApplicationController
     end
   end
 
-  # Creates one submission that compiles once and runs all test cases sequentially.
-  def judge
-    test_cases = normalized_test_cases
-    return unless test_cases
-
-    submission = Submission.new(submission_params(params))
-    submission.number_of_runs = 1
-    submission.test_cases = test_cases
-    submission.queued_at = DateTime.now
-    submission.queue_host = ENV["HOSTNAME"]
-
-    if submission.save
-      MultiTestIsolateJob.perform_later(submission.id)
-      render json: { token: submission.token }, status: :created
-    else
-      render json: submission.errors, status: :unprocessable_entity
-    end
-  end
-
   # Batch Create does not support sync (wait=true) mode.
   def batch_create
     number_of_submissions = params[:submissions].try(:size).to_i
@@ -158,16 +139,23 @@ class SubmissionsController < ApplicationController
     submissions = params[:submissions].each.collect{ |p| Submission.new(submission_params(p)) }
 
     response = []
+    valid_submissions = []
     has_valid_submission = false
 
     submissions.each do |submission|
+      submission.queued_at = DateTime.now
+      submission.queue_host = ENV["HOSTNAME"]
       if submission.save
-        IsolateRunner.perform_later(submission)
         response << { token: submission.token }
+        valid_submissions << submission
         has_valid_submission = true
       else
         response << submission.errors
       end
+    end
+
+    valid_submissions.group_by { |submission| batch_compile_key(submission) }.each_value do |group|
+      BatchIsolateJob.perform_later(group.map(&:id))
     end
 
     render json: response, status: has_valid_submission ? :created : :unprocessable_entity
@@ -175,43 +163,15 @@ class SubmissionsController < ApplicationController
 
   private
 
-  def normalized_test_cases
-    test_cases = params[:test_cases]
-
-    unless test_cases.is_a?(Array) && test_cases.present?
-      render json: { test_cases: ["must be a non-empty array"] }, status: :unprocessable_entity
-      return nil
-    end
-
-    if test_cases.length > Config::MAX_SUBMISSION_BATCH_SIZE
-      render json: {
-        test_cases: ["must contain at most #{Config::MAX_SUBMISSION_BATCH_SIZE} items"]
-      }, status: :unprocessable_entity
-      return nil
-    end
-
-    normalized = test_cases.map do |test_case|
-      unless test_case.respond_to?(:key?) &&
-             (test_case.key?(:stdin) || test_case.key?("stdin")) &&
-             (test_case.key?(:expected_output) || test_case.key?("expected_output"))
-        render json: {
-          test_cases: ["each item must contain stdin and expected_output"]
-        }, status: :unprocessable_entity
-        return nil
-      end
-
-      stdin = test_case[:stdin] || test_case["stdin"]
-      expected_output = test_case[:expected_output] || test_case["expected_output"]
-
-      if @base64_encoded
-        stdin = Base64Service.decode(stdin)
-        expected_output = Base64Service.decode(expected_output)
-      end
-
-      { stdin: stdin.to_s, expected_output: expected_output.to_s }
-    end
-
-    normalized
+  def batch_compile_key(submission)
+    [
+      submission.source_code,
+      submission.language_id,
+      submission.compiler_options,
+      submission.additional_files,
+      submission.enable_per_process_and_thread_time_limit,
+      submission.enable_per_process_and_thread_memory_limit
+    ]
   end
 
   def submission_params(params)

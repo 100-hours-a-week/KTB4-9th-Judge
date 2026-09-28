@@ -41,7 +41,6 @@
 #  updated_at                                 :datetime
 #  queue_host                                 :string
 #  execution_host                             :string
-#  test_cases                                 :jsonb
 #
 
 class Submission < ApplicationRecord
@@ -123,25 +122,6 @@ class Submission < ApplicationRecord
   def expected_output=(value)
     super(value)
     self[:expected_output] = Base64Service.encode(self[:expected_output])
-  end
-
-  def test_cases=(values)
-    encoded_test_cases = Array(values).map do |test_case|
-      {
-        "stdin" => Base64Service.encode(test_case[:stdin] || test_case["stdin"]),
-        "expected_output" => Base64Service.encode(test_case[:expected_output] || test_case["expected_output"])
-      }
-    end
-    self[:test_cases] = encoded_test_cases
-  end
-
-  def decoded_test_cases
-    Array(self[:test_cases]).map do |test_case|
-      {
-        stdin: Base64Service.decode(test_case["stdin"]),
-        expected_output: Base64Service.decode(test_case["expected_output"])
-      }
-    end
   end
 
 

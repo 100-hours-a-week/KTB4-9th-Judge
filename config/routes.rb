@@ -5,7 +5,6 @@ Rails.application.routes.draw do
   resources :submissions, only: [:index, :show, :create, :destroy], param: :token do
     post 'batch', to: 'submissions#batch_create', on: :collection
     get 'batch', to: 'submissions#batch_show', on: :collection
-    post 'judge', to: 'submissions#judge', on: :collection
   end
 
   resources :languages, only: [:index, :show] do
