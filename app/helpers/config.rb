@@ -20,6 +20,7 @@ module Config
   WALL_TIME_LIMIT = (ENV["WALL_TIME_LIMIT"].presence || 10).to_f
   MAX_WALL_TIME_LIMIT = (ENV["MAX_WALL_TIME_LIMIT"].presence || 20).to_f
   MEMORY_LIMIT = (ENV["MEMORY_LIMIT"].presence || 128000).to_i # in KB
+  MIN_MEMORY_LIMIT = (ENV["MIN_MEMORY_LIMIT"].presence || 2048).to_i
   MAX_MEMORY_LIMIT = (ENV["MAX_MEMORY_LIMIT"].presence || 512000).to_i
   STACK_LIMIT = (ENV["STACK_LIMIT"].presence || 64000).to_i # in KB
   MAX_STACK_LIMIT = (ENV["MAX_STACK_LIMIT"].presence || 128000).to_i

@@ -57,7 +57,7 @@ class Submission < ApplicationRecord
   validates :wall_time_limit,
             numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: Config::MAX_WALL_TIME_LIMIT }
   validates :memory_limit,
-            numericality: { greater_than_or_equal_to: 2048, less_than_or_equal_to: Config::MAX_MEMORY_LIMIT }
+            numericality: { greater_than_or_equal_to: Config::MIN_MEMORY_LIMIT, less_than_or_equal_to: Config::MAX_MEMORY_LIMIT }
   validates :stack_limit,
             numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: Config::MAX_STACK_LIMIT }
   validates :max_processes_and_or_threads,
@@ -238,6 +238,9 @@ class Submission < ApplicationRecord
     self.cpu_extra_time ||= Config::CPU_EXTRA_TIME
     self.wall_time_limit ||= Config::WALL_TIME_LIMIT
     self.memory_limit ||= Config::MEMORY_LIMIT
+    if self.memory_limit.to_i.positive? && self.memory_limit < Config::MIN_MEMORY_LIMIT
+      self.memory_limit = Config::MIN_MEMORY_LIMIT
+    end
     self.stack_limit ||= Config::STACK_LIMIT
     self.max_processes_and_or_threads ||= Config::MAX_PROCESSES_AND_OR_THREADS
     self.enable_per_process_and_thread_time_limit = NilValue.value_or_default(
