@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2022_05_28_155848) do
+ActiveRecord::Schema.define(version: 2026_09_28_000000) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -65,6 +65,7 @@ ActiveRecord::Schema.define(version: 2022_05_28_155848) do
     t.datetime "updated_at"
     t.string "queue_host"
     t.string "execution_host"
+    t.jsonb "test_cases", default: [], null: false
     t.index ["token"], name: "index_submissions_on_token"
   end
 

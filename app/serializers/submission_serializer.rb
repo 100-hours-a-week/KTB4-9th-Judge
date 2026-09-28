@@ -1,5 +1,5 @@
 class SubmissionSerializer < ActiveModel::Serializer
-  attributes((Submission.column_names + ["status", "language"] - ["id"]).collect(&:to_sym))
+  attributes((Submission.column_names + ["status", "language"] - ["id", "test_cases"]).collect(&:to_sym))
 
   def self.default_fields
     @@default_fields ||= [

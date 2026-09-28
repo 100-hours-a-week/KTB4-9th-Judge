@@ -158,6 +158,36 @@ paths:
                 $ref: '#/components/schemas/BatchCreateResult'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /submissions/judge:
+    post:
+      tags: [Submissions]
+      summary: Create a compile-once multi-test submission
+      description: |
+        Compiles the submitted source once and executes test cases sequentially.
+        Execution stops at the first failed test case. The response and stored
+        result represent only the overall submission; the failed test-case index
+        is not exposed.
+      parameters:
+        - $ref: '#/components/parameters/Base64Encoded'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MultiTestSubmissionInput'
+      responses:
+        '201':
+          description: Multi-test submission created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /submissions/{token}:
     parameters:
       - name: token
@@ -606,6 +636,31 @@ components:
         callback_url:
           type: string
           format: uri
+    MultiTestSubmissionInput:
+      allOf:
+        - $ref: '#/components/schemas/SubmissionInput'
+        - type: object
+          required: [test_cases]
+          properties:
+            test_cases:
+              type: array
+              minItems: 1
+              description: Test cases are executed sequentially and stop at the first failure.
+              items:
+                type: object
+                required: [stdin, expected_output]
+                properties:
+                  stdin:
+                    type: string
+                  expected_output:
+                    type: string
+    TokenResponse:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          format: uuid
     Submission:
       type: object
       description: Present fields depend on fields and wait query parameters.
@@ -702,4 +757,3 @@ components:
 security:
   - AuthToken: []
   - {}
-

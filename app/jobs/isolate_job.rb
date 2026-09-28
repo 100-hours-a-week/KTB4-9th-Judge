@@ -251,7 +251,7 @@ class IsolateJob < ApplicationJob
     `sudo rm #{run_script}` unless submission.is_project
   end
 
-  def verify
+  def verify(expected_output = submission.expected_output)
     submission.finished_at = DateTime.now
 
     metadata = get_metadata
@@ -270,7 +270,7 @@ class IsolateJob < ApplicationJob
     submission.exit_code = metadata[:exitcode].try(:to_i) || 0
     submission.exit_signal = metadata[:exitsig].try(:to_i)
     submission.message = metadata[:message]
-    submission.status = determine_status(metadata[:status], submission.exit_signal)
+    submission.status = determine_status(metadata[:status], submission.exit_signal, expected_output)
 
     # After adding support for compiler_options and command_line_arguments
     # status "Exec Format Error" will no longer occur because compile and run
@@ -346,7 +346,7 @@ class IsolateJob < ApplicationJob
     return metadata
   end
 
-  def determine_status(status, exit_signal)
+  def determine_status(status, exit_signal, expected_output = submission.expected_output)
     if status == "TO"
       return Status.tle
     elsif status == "SG"
@@ -355,7 +355,7 @@ class IsolateJob < ApplicationJob
       return Status.nzec
     elsif status == "XX"
       return Status.boxerr
-    elsif submission.expected_output.nil? || strip(submission.expected_output) == strip(submission.stdout)
+    elsif expected_output.nil? || strip(expected_output) == strip(submission.stdout)
       return Status.ac
     else
       return Status.wa
