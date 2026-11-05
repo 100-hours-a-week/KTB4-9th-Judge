@@ -1,0 +1,15 @@
+#!/bin/bash
+# cgroup v2 컨테이너에서 isolate가 사용할 하위 cgroup을 준비한다. v1 노드에서는 아무것도 하지 않는다.
+set -euo pipefail
+
+root=/sys/fs/cgroup
+[ -f "$root/cgroup.controllers" ] || exit 0
+
+# 프로세스가 있는 cgroup에서는 하위 controller를 켤 수 없으므로 init으로 옮긴다.
+mkdir -p "$root/init" "$root/isolate"
+while read -r pid; do
+    echo "$pid" > "$root/init/cgroup.procs" 2>/dev/null || true
+done < "$root/cgroup.procs"
+
+echo "+cpuset +memory +pids" > "$root/cgroup.subtree_control"
+echo "+cpuset +memory +pids" > "$root/isolate/cgroup.subtree_control"

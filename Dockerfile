@@ -1,3 +1,11 @@
+# cgroup v2 노드용 isolate 2.x. 기본 이미지의 Debian 10 헤더로는 빌드되지 않아 정적 빌드한 바이너리만 복사한다.
+FROM debian:bookworm-slim AS isolate-v2-build
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates gcc git libc6-dev libcap-dev libseccomp-dev make && \
+    git clone --depth 1 --branch v2.7 https://github.com/ioi/isolate.git /tmp/isolate && \
+    make -C /tmp/isolate isolate CONFIG=/usr/local/etc/isolate-v2 CFLAGS_HARDEN= LDFLAGS_HARDEN=-static && \
+    install -m 4755 /tmp/isolate/isolate /isolate-v2
+
 FROM judge0/compilers:1.4.0 AS production
 
 ENV JUDGE0_HOMEPAGE "https://judge0.com"
@@ -27,6 +35,12 @@ RUN sed -i \
     gem install bundler:2.1.4 && \
     npm install -g --unsafe-perm aglio@2.3.0
 
+# 실행 시 scripts/isolate-compat가 cgroup 버전에 맞는 isolate를 고른다.
+COPY --from=isolate-v2-build /isolate-v2 /usr/local/bin/isolate-v2
+RUN chmod 4755 /usr/local/bin/isolate-v2 && \
+    mv /usr/local/bin/isolate /usr/local/bin/isolate-v1 && \
+    printf 'box_root = /var/local/lib/isolate\ncg_root = /sys/fs/cgroup/isolate\nfirst_uid = 60000\nfirst_gid = 60000\nnum_boxes = 2147483647\nlock_root = /run/isolate/locks\n' > /usr/local/etc/isolate-v2
+
 EXPOSE 2358
 
 WORKDIR /api
@@ -38,6 +52,7 @@ COPY cron /etc/cron.d
 RUN cat /etc/cron.d/* | crontab -
 
 COPY . .
+RUN install -m 0755 /api/scripts/isolate-compat /usr/local/bin/isolate
 
 ENTRYPOINT ["/api/docker-entrypoint.sh"]
 CMD ["/api/scripts/server"]
