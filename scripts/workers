@@ -4,6 +4,7 @@
 # Usage: ./scripts/workers
 #
 source ./scripts/load-config
+sudo ./scripts/setup-cgroup-v2
 export | sudo tee /api/environment
 
 run_resque=1

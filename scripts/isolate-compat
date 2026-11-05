@@ -1,0 +1,15 @@
+#!/bin/bash
+# cgroup 버전에 맞는 isolate를 실행한다. v1은 기존 1.8.1, v2는 2.x를 사용한다.
+if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
+    exec /usr/local/bin/isolate-v1 "$@"
+fi
+
+# isolate 2.x에서 제거된 타이밍 옵션을 뺀다. 2.x는 --cg에서 항상 cgroup 타이밍을 사용한다.
+args=()
+for arg in "$@"; do
+    case "$arg" in
+        --cg-timing|--no-cg-timing) ;;
+        *) args+=("$arg") ;;
+    esac
+done
+exec /usr/local/bin/isolate-v2 "${args[@]}"
