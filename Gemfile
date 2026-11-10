@@ -19,3 +19,12 @@ group :development do
   gem 'annotate', '~> 3.0'
   gem 'listen', '~> 3.2'
 end
+
+# 분산 트레이싱. 런타임이 Ruby 2.7이라 2.7을 지원하는 마지막 버전대로 고정한다.
+# OTEL_EXPORTER_OTLP_ENDPOINT가 있을 때만 켜진다(config/initializers/opentelemetry.rb).
+gem 'opentelemetry-sdk', '~> 1.2.1'
+gem 'opentelemetry-exporter-otlp', '~> 0.24.2'
+gem 'opentelemetry-instrumentation-rails', '~> 0.25.0'
+gem 'opentelemetry-instrumentation-pg', '~> 0.23.0'
+gem 'opentelemetry-instrumentation-redis', '~> 0.24.1'
+gem 'opentelemetry-instrumentation-resque', '~> 0.3.1'
