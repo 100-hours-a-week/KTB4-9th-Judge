@@ -64,7 +64,8 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "2.7.0"
+          # 새 러너 이미지에는 각 계열의 최신 패치만 있다. 운영 이미지는 2.7.0이고 같은 2.7 계열이다.
+          ruby-version: "2.7.8"
           bundler: "2.1.4"
           bundler-cache: true
 
