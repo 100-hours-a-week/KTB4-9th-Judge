@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-required=(AWS_REGION AWS_ACCOUNT_ID ECR_REPOSITORY IMAGE_TAG LOCAL_IMAGE COMPONENT SOURCE_REPOSITORY SOURCE_REPO_SLUG CLOUD_REPOSITORY GH_TOKEN)
+# GH_TOKEN이 비어 있으면 승격 신호를 보내지 않고 수동 승격 방법을 남긴다.
+required=(AWS_REGION AWS_ACCOUNT_ID ECR_REPOSITORY IMAGE_TAG LOCAL_IMAGE COMPONENT SOURCE_REPOSITORY SOURCE_REPO_SLUG CLOUD_REPOSITORY)
 for name in "${required[@]}"; do
   [[ -n "${!name:-}" ]] || { printf 'ERROR: missing %s\n' "${name}" >&2; exit 1; }
 done
@@ -22,6 +23,13 @@ digest="$(aws ecr describe-images \
   --query 'imageDetails[0].imageDigest' \
   --output text)"
 [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || { printf 'ERROR: pushed image digest was not found\n' >&2; exit 1; }
+
+if [[ -z "${GH_TOKEN:-}" ]]; then
+  message="수동 승격: ${CLOUD_REPOSITORY} Actions → V3 Production Promote → component=${COMPONENT}, image_tag=${IMAGE_TAG}"
+  printf 'Published %s@%s\n%s\n' "${registry}/${ECR_REPOSITORY}" "${digest}" "${message}"
+  [[ -n "${GITHUB_STEP_SUMMARY:-}" ]] && printf '### ECR 푸시 완료\n\n`%s@%s`\n\n%s\n' "${registry}/${ECR_REPOSITORY}" "${digest}" "${message}" >>"${GITHUB_STEP_SUMMARY}"
+  exit 0
+fi
 
 gh api --method POST "repos/${CLOUD_REPOSITORY}/dispatches" \
   -f 'event_type=promote-v3' \

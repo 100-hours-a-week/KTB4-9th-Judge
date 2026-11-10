@@ -119,8 +119,19 @@ jobs:
       - name: Log in to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      # Cloud 저장소에 승격 신호를 보낼 GitHub App 시크릿이 없으면 신호 없이 ECR 푸시만 한다.
+      - name: Check promotion credentials
+        id: promote-creds
+        env:
+          APP_ID: ${{ secrets.CLOUD_GITHUB_APP_ID }}
+          APP_KEY: ${{ secrets.CLOUD_GITHUB_APP_PRIVATE_KEY }}
+        run: |
+          if [[ -n "${APP_ID}" && -n "${APP_KEY}" ]]; then echo "available=true" >>"${GITHUB_OUTPUT}"
+          else echo "::notice::CLOUD_GITHUB_APP_* 시크릿이 없어 승격 신호를 보내지 않는다."; fi
+
       - name: Create Cloud repository token
         id: cloud-token
+        if: steps.promote-creds.outputs.available == 'true'
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.CLOUD_GITHUB_APP_ID }}
