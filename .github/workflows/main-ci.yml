@@ -1,0 +1,141 @@
+name: Judge Main Image
+
+# main의 CI(Rails 기동 확인, 이미지 빌드)가 통과한 커밋만 ECR cosmos-v2/judge에 올리고
+# Cloud 저장소 v3-promote를 호출한다. v3-promote는 ECR 스캔을 확인한 뒤
+# v3-john의 judge-api, judge-worker 이미지를 바꾸는 PR을 연다.
+# 오레곤 운영 배포(cd.yml, Docker Hub)와는 별개로 동작한다.
+# 베이스 이미지의 기존 취약점은 .trivyignore 기준선으로 관리한다.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: judge-main-image-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  image-security:
+    name: Build, scan and publish main image
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: production-ci
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+      LOCAL_IMAGE: cosmos-judge:${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - name: Checkout CI commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image once
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: production
+          load: true
+          provenance: false
+          tags: ${{ env.LOCAL_IMAGE }}
+          cache-from: type=gha
+
+      - name: Scan built image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          scanners: vuln,secret
+          format: sarif
+          output: trivy-image-judge.sarif
+          exit-code: "0"
+
+      - name: Preserve image scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-judge-${{ github.run_id }}
+          path: trivy-image-judge.sarif
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Block fixable critical image vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: true
+          # 기준선에 있는 기존 취약점은 제외하고 새로 생긴 CRITICAL만 막는다.
+          trivyignores: .trivyignore
+          format: table
+          exit-code: "1"
+
+      - name: Block exposed secrets in image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          scanners: secret
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          format: table
+          exit-code: "1"
+
+      - name: Verify production publication configuration
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_PROD_CI_ROLE_ARN: ${{ vars.AWS_PROD_CI_ROLE_ARN }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          for name in AWS_REGION AWS_ACCOUNT_ID AWS_PROD_CI_ROLE_ARN ECR_REPOSITORY; do
+            [[ -n "${!name:-}" ]] || { echo "::error::Missing production-ci variable: ${name}"; exit 1; }
+          done
+          [[ "${ECR_REPOSITORY}" == "cosmos-v2/judge" ]] || { echo "::error::ECR_REPOSITORY must be cosmos-v2/judge"; exit 1; }
+
+      - name: Configure production AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_PROD_CI_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Create Cloud repository token
+        id: cloud-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CLOUD_GITHUB_APP_ID }}
+          private-key: ${{ secrets.CLOUD_GITHUB_APP_PRIVATE_KEY }}
+          owner: 100-hours-a-week
+          repositories: KTB4-9th-Cloud
+
+      - name: Publish immutable image and request GitOps promotion
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          COMPONENT: judge
+          SOURCE_REPOSITORY: cosmos-v2/judge
+          SOURCE_REPO_SLUG: 100-hours-a-week/KTB4-9th-Judge
+          CLOUD_REPOSITORY: 100-hours-a-week/KTB4-9th-Cloud
+          GH_TOKEN: ${{ steps.cloud-token.outputs.token }}
+        run: bash .github/scripts/publish-main-image.sh
